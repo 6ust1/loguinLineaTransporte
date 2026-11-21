@@ -1,6 +1,21 @@
-# Estructura MVC en PHP con Composer
+# Estructura MVC en PHP con Composer y MySQL (login.sql)
 
-Este proyecto implementa una arquitectura **Modelo-Vista-Controlador (MVC)** limpia y moderna utilizando **Composer** para el autocargado de clases bajo el estándar **PSR-4**.
+Proyecto con arquitectura **Modelo-Vista-Controlador (MVC)**, autocarga **PSR-4** vía Composer, comunicación asíncrona por **Ajax (Fetch API)** y persistencia en base de datos relacional **MySQL / MariaDB** (`login.sql`).
+
+---
+
+## 🗄️ Base de Datos (`login`)
+
+Importada desde el archivo SQL `login.sql`:
+- **`usuarios`**: Contiene `id_usuario`, `id_rol`, `nombre_completo`, `usuario`, `correo`, `clave_hash` (Bcrypt), `estado` (1=Activo, 0=Inactivo), `intentos_fallidos`, `bloqueado_hasta`, `ultimo_acceso`.
+- **`roles`**: Contiene los roles del sistema (`1: admin`, `2: usuario`).
+- **`logs_acceso`**: Registro de auditoría para eventos (`login_exitoso`, `login_fallido`, `logout`, `cambio_clave`, `recuperacion_solicitada`) con IP y User-Agent.
+- **`recuperacion_contrasenas`**: Estructura para tokens de restablecimiento.
+
+### 🔑 Credenciales iniciales (de `login.sql`):
+- **Usuario:** `admin` (o `admin@ejemplo.com`)
+- **Contraseña:** `password`
+- **Rol:** `admin`
 
 ---
 
@@ -9,98 +24,45 @@ Este proyecto implementa una arquitectura **Modelo-Vista-Controlador (MVC)** lim
 ```text
 Prueba/
 ├── app/
-│   ├── Controllers/         # Controladores (lógica de negocio y peticiones)
-│   │   └── HomeController.php
-│   ├── Models/              # Modelos (datos y lógica de persistencia/DB)
-│   │   └── UserModel.php
-│   ├── Views/               # Vistas (plantillas HTML/PHP)
+│   ├── Controllers/
+│   │   └── HomeController.php    # Lógica de Login, Registro, Recuperación y CRUD
+│   ├── Models/
+│   │   └── UserModel.php         # Consultas preparadas con PDO hacia MySQL y auditoría
+│   ├── Views/
 │   │   └── home/
-│   │       ├── index.php
+│   │       ├── index.php         # Vista interactiva (Auth + Dashboard CRUD)
 │   │       └── about.php
-│   └── Core/                # Clases base del núcleo
-│       ├── Controller.php   # Controlador base (renderizado y respuestas JSON)
-│       └── Router.php       # Enrutador para gestionar URLs
-├── config/                  # Archivos de configuración
-├── public/                  # Raíz pública del servidor web
-│   ├── .htaccess            # Reglas de reescritura para URLs amigables
-│   └── index.php            # Front Controller (punto de entrada)
-├── vendor/                  # Dependencias y autoload de Composer (ignorado en git)
-├── .gitignore
-├── composer.json            # Configuración de Composer y PSR-4
+│   └── Core/
+│       ├── Controller.php        # Controlador base (render y json)
+│       ├── Database.php          # Conexión Singleton PDO a MySQL
+│       └── Router.php            # Enrutador HTTP (GET y POST)
+├── config/
+├── public/
+│   ├── .htaccess                 # Reglas de reescritura para URLs amigables
+│   └── index.php                 # Front Controller
+├── composer.json                 # PSR-4 mapping: "App\\": "app/"
 └── README.md
 ```
 
 ---
 
-## ⚙️ ¿Cómo funciona Composer en este MVC?
+## ⚙️ Conexión a la Base de Datos
 
-En el archivo [composer.json](file:///c:/Users/Gustavo%20Guerrero/Desktop/Prueba/composer.json) se definió el mapeo **PSR-4**:
-
-```json
-{
-    "autoload": {
-        "psr-4": {
-            "App\\": "app/"
-        }
-    }
-}
-```
-
-Esto significa que:
-- Cualquier clase bajo el namespace `App\Controllers` se busca automáticamente en la carpeta `app/Controllers/`.
-- Cualquier clase bajo `App\Models` se busca en `app/Models/`.
-- Ya **no necesitas usar `require` ni `include`** manualmente para cada clase. Solo importas con `use App\Controllers\MiControlador;`.
+Definida en [app/Core/Database.php](file:///c:/Users/Gustavo%20Guerrero/Desktop/Prueba/app/Core/Database.php):
+- **Host:** `127.0.0.1`
+- **Puerto:** `3306`
+- **Base de Datos:** `login`
+- **Usuario:** `root`
+- **Contraseña:** `""` (vacía por defecto en XAMPP)
 
 ---
 
 ## 🚀 Cómo ejecutar el proyecto
 
-Abre una terminal en la carpeta del proyecto y ejecuta el servidor integrado de PHP:
-
-```bash
-php -S localhost:8000 -t public
-```
-
-Luego abre tu navegador en:
-👉 [http://localhost:8000](http://localhost:8000)
-
-Rutas disponibles de prueba:
-- **`http://localhost:8000/`** : Página principal con datos renderizados desde el Modelo.
-- **`http://localhost:8000/about`** : Página acerca de.
-- **`http://localhost:8000/api/users`** : Ejemplo de respuesta JSON para APIs.
-
----
-
-## ➕ Cómo añadir nuevas funcionalidades
-
-### 1. Crear un nuevo Controlador
-Crea un archivo en `app/Controllers/ProductoController.php`:
-```php
-<?php
-namespace App\Controllers;
-
-use App\Core\Controller;
-
-class ProductoController extends Controller
-{
-    public function listar()
-    {
-        $this->render('productos/listar', ['productos' => []]);
-    }
-}
-```
-
-### 2. Registrar la ruta
-En `public/index.php`:
-```php
-use App\Controllers\ProductoController;
-
-$router->get('/productos', [ProductoController::class, 'listar']);
-```
-
-### 3. Actualizar el autoload si creas nuevas carpetas o namespaces
-Cada vez que agregues o modifiques namespaces en `composer.json`, corre:
-```bash
-composer dump-autoload
-```
-
+1. Asegúrate de tener **MySQL** activo en XAMPP.
+2. Inicia el servidor de desarrollo de PHP:
+   ```powershell
+   php -S localhost:8000 -t public
+   ```
+3. Abre en tu navegador:
+   👉 **[http://localhost:8000](http://localhost:8000)**

@@ -2,97 +2,148 @@
 
 namespace App\Models;
 
+use App\Core\Database;
+use PDO;
+
 class UserModel
 {
-    private string $archivo;
+    private PDO $db;
 
     public function __construct()
     {
-        // Ubicación de la base de datos simulada en formato JSON
-        $this->archivo = dirname(__DIR__, 2) . '/usuarios.json';
-        $this->inicializarBaseDatos();
+        $this->db = Database::getConnection();
     }
 
     /**
-     * Si no existe el archivo usuarios.json, crea un usuario Administrador por defecto
-     */
-    private function inicializarBaseDatos(): void
-    {
-        if (!file_exists($this->archivo)) {
-            $usuarioInicial = [
-                [
-                    "nombre_completo" => "Administrador del Sistema",
-                    "username" => "admin",
-                    "password" => password_hash("admin123", PASSWORD_BCRYPT),
-                    "rol" => "Administrador",
-                    "estado" => "Activo"
-                ],
-                [
-                    "nombre_completo" => "Carlos Despachador",
-                    "username" => "carlos",
-                    "password" => password_hash("carlos123", PASSWORD_BCRYPT),
-                    "rol" => "Despachador",
-                    "estado" => "Activo"
-                ]
-            ];
-            file_put_contents($this->archivo, json_encode($usuarioInicial, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-        }
-    }
-
-    /**
-     * Retorna todos los usuarios
+     * Retorna todos los usuarios junto con el nombre de su rol
      */
     public function obtenerUsuarios(): array
     {
-        if (file_exists($this->archivo)) {
-            $contenido = file_get_contents($this->archivo);
-            $datos = json_decode($contenido, true);
-            return is_array($datos) ? $datos : [];
-        }
-        return [];
+        $sql = "SELECT 
+                    u.id_usuario,
+                    u.id_rol,
+                    u.nombre_completo,
+                    u.usuario,
+                    u.correo,
+                    u.estado,
+                    u.intentos_fallidos,
+                    u.ultimo_acceso,
+                    u.creado_en,
+                    r.nombre_rol
+                FROM usuarios u
+                JOIN roles r ON u.id_rol = r.id_rol
+                ORDER BY u.id_usuario ASC";
+
+        $stmt = $this->db->query($sql);
+        return $stmt->fetchAll();
     }
 
     /**
-     * Busca un usuario por su nombre de usuario
+     * Retorna todos los roles disponibles
      */
-    public function buscarPorUsername(string $username): ?array
+    public function obtenerRoles(): array
     {
-        $usuarios = $this->obtenerUsuarios();
-        foreach ($usuarios as $usuario) {
-            if (strcasecmp($usuario['username'], $username) === 0) {
-                return $usuario;
-            }
-        }
-        return null;
+        $stmt = $this->db->query("SELECT id_rol, nombre_rol, descripcion FROM roles ORDER BY id_rol ASC");
+        return $stmt->fetchAll();
     }
 
     /**
-     * Valida credenciales para el Login
+     * Busca un usuario por username o correo
      */
-    public function autenticar(string $username, string $password): array
+    public function buscarPorIdentificador(string $identificador): ?array
     {
-        $usuario = $this->buscarPorUsername($username);
+        $sql = "SELECT u.*, r.nombre_rol 
+                FROM usuarios u
+                JOIN roles r ON u.id_rol = r.id_rol
+                WHERE u.usuario = :term1 OR u.correo = :term2
+                LIMIT 1";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':term1' => $identificador, ':term2' => $identificador]);
+        $usuario = $stmt->fetch();
+
+        return $usuario ?: null;
+    }
+
+    /**
+     * Autenticación con soporte de intentos fallidos, bloqueo y registro de auditoría (logs)
+     */
+    public function autenticar(string $identificador, string $password): array
+    {
+        $usuario = $this->buscarPorIdentificador($identificador);
 
         if (!$usuario) {
+            $this->registrarLog(null, $identificador, 'login_fallido');
             return [
                 'success' => false,
-                'message' => 'El usuario ingresado no existe.'
+                'message' => 'El usuario o correo no existe.'
             ];
         }
 
-        if (($usuario['estado'] ?? 'Activo') !== 'Activo') {
+        $idUsuario = (int)$usuario['id_usuario'];
+
+        // Verificar si la cuenta se encuentra bloqueada temporalmente
+        if (!empty($usuario['bloqueado_hasta'])) {
+            $bloqueadoHasta = strtotime($usuario['bloqueado_hasta']);
+            if ($bloqueadoHasta > time()) {
+                $minutosRestantes = ceil(($bloqueadoHasta - time()) / 60);
+                return [
+                    'success' => false,
+                    'message' => "Cuenta bloqueada temporalmente por intentos fallidos. Intente de nuevo en {$minutosRestantes} minuto(s)."
+                ];
+            } else {
+                // Si el tiempo ya pasó, desbloquear
+                $this->db->prepare("UPDATE usuarios SET intentos_fallidos = 0, bloqueado_hasta = NULL WHERE id_usuario = :id")
+                         ->execute([':id' => $idUsuario]);
+            }
+        }
+
+        // Verificar si el usuario está inactivo
+        if ((int)$usuario['estado'] !== 1) {
+            $this->registrarLog($idUsuario, $identificador, 'login_fallido');
             return [
                 'success' => false,
-                'message' => 'El usuario se encuentra inactivo. Comuníquese con el administrador.'
+                'message' => 'La cuenta está inactiva. Comuníquese con el administrador.'
             ];
         }
 
-        if (!password_verify($password, $usuario['password'])) {
-            return [
-                'success' => false,
-                'message' => 'Contraseña incorrecta.'
-            ];
+        // Validar contraseña con clave_hash
+        if (!password_verify($password, $usuario['clave_hash'])) {
+            $intentos = (int)$usuario['intentos_fallidos'] + 1;
+            
+            if ($intentos >= 5) {
+                // Bloquear por 15 minutos al 5to intento
+                $sqlBlock = "UPDATE usuarios 
+                             SET intentos_fallidos = :intentos, bloqueado_hasta = DATE_ADD(NOW(), INTERVAL 15 MINUTE) 
+                             WHERE id_usuario = :id";
+                $this->db->prepare($sqlBlock)->execute([':intentos' => $intentos, ':id' => $idUsuario]);
+                $this->registrarLog($idUsuario, $identificador, 'login_fallido');
+
+                return [
+                    'success' => false,
+                    'message' => 'Ha excedido el número de intentos permitidos. Cuenta bloqueada por 15 minutos.'
+                ];
+            } else {
+                $this->db->prepare("UPDATE usuarios SET intentos_fallidos = :intentos WHERE id_usuario = :id")
+                         ->execute([':intentos' => $intentos, ':id' => $idUsuario]);
+                $this->registrarLog($idUsuario, $identificador, 'login_fallido');
+
+                $intentosRestantes = 5 - $intentos;
+                return [
+                    'success' => false,
+                    'message' => "Contraseña incorrecta. Le quedan {$intentosRestantes} intento(s) antes del bloqueo temporal."
+                ];
+            }
         }
+
+        // Login exitoso: restablecer intentos, actualizar último acceso
+        $sqlUpdate = "UPDATE usuarios 
+                      SET intentos_fallidos = 0, bloqueado_hasta = NULL, ultimo_acceso = NOW() 
+                      WHERE id_usuario = :id";
+        $this->db->prepare($sqlUpdate)->execute([':id' => $idUsuario]);
+
+        // Registrar log de auditoría
+        $this->registrarLog($idUsuario, $identificador, 'login_exitoso');
 
         return [
             'success' => true,
@@ -102,144 +153,159 @@ class UserModel
     }
 
     /**
-     * Registra un nuevo usuario (Crear Usuario)
+     * Registra un nuevo usuario en la base de datos
      */
-    public function registrarUsuario(string $nombre, string $usuario, string $password, string $rol, string $estado = 'Activo'): array
+    public function registrarUsuario(string $nombre, string $usuario, string $correo, string $password, int $idRol = 2, int $estado = 1): array
     {
-        if ($this->buscarPorUsername($usuario) !== null) {
-            return [
-                'success' => false,
-                'message' => "El nombre de usuario '{$usuario}' ya está registrado. Por favor elija otro."
-            ];
-        }
+        // Validar si el usuario o correo ya existen
+        $checkStmt = $this->db->prepare("SELECT usuario, correo FROM usuarios WHERE usuario = :u OR correo = :c LIMIT 1");
+        $checkStmt->execute([':u' => $usuario, ':c' => $correo]);
+        $existente = $checkStmt->fetch();
 
-        $passwordHash = password_hash($password, PASSWORD_BCRYPT);
-
-        $nuevoUsuario = [
-            "nombre_completo" => $nombre,
-            "username" => $usuario,
-            "password" => $passwordHash,
-            "rol" => $rol,
-            "estado" => $estado
-        ];
-
-        $usuarios = $this->obtenerUsuarios();
-        $usuarios[] = $nuevoUsuario;
-
-        $guardado = file_put_contents($this->archivo, json_encode($usuarios, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-
-        if ($guardado === false) {
-            return [
-                'success' => false,
-                'message' => 'Error al guardar el usuario en el archivo de datos.'
-            ];
-        }
-
-        return [
-            'success' => true,
-            'message' => 'Usuario creado exitosamente.',
-            'usuario' => $nuevoUsuario
-        ];
-    }
-
-    /**
-     * Actualiza la información de un usuario (CRUD Update)
-     */
-    public function actualizarUsuario(string $originalUsername, string $nombre, string $rol, string $estado, ?string $nuevaPassword = null): array
-    {
-        $usuarios = $this->obtenerUsuarios();
-        $encontrado = false;
-
-        foreach ($usuarios as $indice => $u) {
-            if (strcasecmp($u['username'], $originalUsername) === 0) {
-                $usuarios[$indice]['nombre_completo'] = $nombre;
-                $usuarios[$indice]['rol'] = $rol;
-                $usuarios[$indice]['estado'] = $estado;
-
-                if (!empty($nuevaPassword)) {
-                    $usuarios[$indice]['password'] = password_hash($nuevaPassword, PASSWORD_BCRYPT);
-                }
-
-                $encontrado = true;
-                break;
+        if ($existente) {
+            if (strcasecmp($existente['usuario'], $usuario) === 0) {
+                return ['success' => false, 'message' => "El usuario '{$usuario}' ya se encuentra registrado."];
+            }
+            if (strcasecmp($existente['correo'], $correo) === 0) {
+                return ['success' => false, 'message' => "El correo '{$correo}' ya se encuentra registrado."];
             }
         }
 
-        if (!$encontrado) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no encontrado para actualizar.'
-            ];
+        $claveHash = password_hash($password, PASSWORD_BCRYPT);
+
+        $sql = "INSERT INTO usuarios (id_rol, nombre_completo, usuario, correo, clave_hash, estado) 
+                VALUES (:rol, :nombre, :usuario, :correo, :clave, :estado)";
+
+        $stmt = $this->db->prepare($sql);
+        $ejecutado = $stmt->execute([
+            ':rol' => $idRol,
+            ':nombre' => $nombre,
+            ':usuario' => $usuario,
+            ':correo' => $correo,
+            ':clave' => $claveHash,
+            ':estado' => $estado
+        ]);
+
+        if (!$ejecutado) {
+            return ['success' => false, 'message' => 'No se pudo registrar el usuario en la base de datos.'];
         }
 
-        file_put_contents($this->archivo, json_encode($usuarios, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-
-        return [
-            'success' => true,
-            'message' => 'Usuario actualizado correctamente.'
-        ];
+        return ['success' => true, 'message' => 'Usuario registrado exitosamente.'];
     }
 
     /**
-     * Recuperar o restablecer contraseña
+     * Actualiza la información de un usuario desde el CRUD
      */
-    public function actualizarPassword(string $username, string $nuevaPassword): array
+    public function actualizarUsuario(int $idUsuario, string $nombre, string $usuario, string $correo, int $idRol, int $estado, ?string $nuevaPassword = null): array
     {
-        $usuarios = $this->obtenerUsuarios();
-        $encontrado = false;
+        // Verificar que usuario o correo no pertenezcan a otro usuario
+        $checkStmt = $this->db->prepare("SELECT id_usuario, usuario, correo FROM usuarios WHERE (usuario = :u OR correo = :c) AND id_usuario != :id LIMIT 1");
+        $checkStmt->execute([':u' => $usuario, ':c' => $correo, ':id' => $idUsuario]);
+        $existente = $checkStmt->fetch();
 
-        foreach ($usuarios as $indice => $u) {
-            if (strcasecmp($u['username'], $username) === 0) {
-                $usuarios[$indice]['password'] = password_hash($nuevaPassword, PASSWORD_BCRYPT);
-                $encontrado = true;
-                break;
+        if ($existente) {
+            if (strcasecmp($existente['usuario'], $usuario) === 0) {
+                return ['success' => false, 'message' => "El nombre de usuario '{$usuario}' ya está en uso por otra persona."];
+            }
+            if (strcasecmp($existente['correo'], $correo) === 0) {
+                return ['success' => false, 'message' => "El correo '{$correo}' ya está en uso por otra persona."];
             }
         }
 
-        if (!$encontrado) {
-            return [
-                'success' => false,
-                'message' => "El usuario '{$username}' no fue encontrado."
+        if (!empty($nuevaPassword)) {
+            $claveHash = password_hash($nuevaPassword, PASSWORD_BCRYPT);
+            $sql = "UPDATE usuarios 
+                    SET nombre_completo = :nombre, usuario = :usuario, correo = :correo, id_rol = :rol, estado = :estado, clave_hash = :clave 
+                    WHERE id_usuario = :id";
+            $params = [
+                ':nombre' => $nombre,
+                ':usuario' => $usuario,
+                ':correo' => $correo,
+                ':rol' => $idRol,
+                ':estado' => $estado,
+                ':clave' => $claveHash,
+                ':id' => $idUsuario
+            ];
+        } else {
+            $sql = "UPDATE usuarios 
+                    SET nombre_completo = :nombre, usuario = :usuario, correo = :correo, id_rol = :rol, estado = :estado 
+                    WHERE id_usuario = :id";
+            $params = [
+                ':nombre' => $nombre,
+                ':usuario' => $usuario,
+                ':correo' => $correo,
+                ':rol' => $idRol,
+                ':estado' => $estado,
+                ':id' => $idUsuario
             ];
         }
 
-        file_put_contents($this->archivo, json_encode($usuarios, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
 
-        return [
-            'success' => true,
-            'message' => 'Contraseña restablecida exitosamente. Ya puedes iniciar sesión.'
-        ];
+        return ['success' => true, 'message' => 'Usuario actualizado correctamente.'];
     }
 
     /**
-     * Elimina un usuario (CRUD Delete)
+     * Restablecer contraseña mediante usuario o correo
      */
-    public function eliminarUsuario(string $username): array
+    public function actualizarPassword(string $identificador, string $nuevaPassword): array
     {
-        $usuarios = $this->obtenerUsuarios();
-        $nuevosUsuarios = [];
-        $encontrado = false;
+        $usuario = $this->buscarPorIdentificador($identificador);
 
-        foreach ($usuarios as $u) {
-            if (strcasecmp($u['username'], $username) === 0) {
-                $encontrado = true;
-                continue;
-            }
-            $nuevosUsuarios[] = $u;
+        if (!$usuario) {
+            return ['success' => false, 'message' => "No se encontró ningún usuario con los datos ingresados."];
         }
 
-        if (!$encontrado) {
-            return [
-                'success' => false,
-                'message' => 'El usuario no existe o ya fue eliminado.'
-            ];
+        $idUsuario = (int)$usuario['id_usuario'];
+        $claveHash = password_hash($nuevaPassword, PASSWORD_BCRYPT);
+
+        $stmt = $this->db->prepare("UPDATE usuarios SET clave_hash = :clave, intentos_fallidos = 0, bloqueado_hasta = NULL WHERE id_usuario = :id");
+        $stmt->execute([':clave' => $claveHash, ':id' => $idUsuario]);
+
+        // Registrar log de cambio de clave
+        $this->registrarLog($idUsuario, $identificador, 'cambio_clave');
+
+        return ['success' => true, 'message' => 'Contraseña restablecida exitosamente. Ya puedes iniciar sesión.'];
+    }
+
+    /**
+     * Elimina un usuario por su ID
+     */
+    public function eliminarUsuario(int $idUsuario): array
+    {
+        $stmt = $this->db->prepare("DELETE FROM usuarios WHERE id_usuario = :id");
+        $stmt->execute([':id' => $idUsuario]);
+
+        if ($stmt->rowCount() === 0) {
+            return ['success' => false, 'message' => 'El usuario no existe o ya fue eliminado.'];
         }
 
-        file_put_contents($this->archivo, json_encode($nuevosUsuarios, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        return ['success' => true, 'message' => 'Usuario eliminado correctamente.'];
+    }
 
-        return [
-            'success' => true,
-            'message' => "Usuario '{$username}' eliminado correctamente."
-        ];
+    /**
+     * Inserta un registro en la tabla logs_acceso
+     */
+    public function registrarLog(?int $idUsuario, string $usuarioIngresado, string $evento): void
+    {
+        try {
+            $ip = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+            $userAgent = substr($_SERVER['HTTP_USER_AGENT'] ?? 'Desconocido', 0, 255);
+
+            $sql = "INSERT INTO logs_acceso (id_usuario, usuario_ingresado, evento, ip_address, user_agent) 
+                    VALUES (:id, :user, :evento, :ip, :ua)";
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([
+                ':id' => $idUsuario,
+                ':user' => substr($usuarioIngresado, 0, 50),
+                ':evento' => $evento,
+                ':ip' => $ip,
+                ':ua' => $userAgent
+            ]);
+        } catch (\Exception $e) {
+            // No interrumpir el flujo principal si un log falla
+        }
     }
 }

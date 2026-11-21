@@ -233,13 +233,12 @@
             font-weight: 600;
         }
         .badge-admin { background: #dbeafe; color: #1e40af; }
-        .badge-desp { background: #fef3c7; color: #92400e; }
-        .badge-ofic { background: #e0e7ff; color: #3730a3; }
+        .badge-user { background: #fef3c7; color: #92400e; }
         .badge-activo { background: #dcfce7; color: #15803d; }
         .badge-inactivo { background: #fee2e2; color: #b91c1c; }
 
         .dashboard-container {
-            max-width: 1050px;
+            max-width: 1150px;
             margin: 30px auto;
             padding: 0 20px;
         }
@@ -256,7 +255,7 @@
             border-radius: 12px;
             border: 1px solid var(--border);
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-            overflow: hidden;
+            overflow-x: auto;
         }
 
         table {
@@ -303,10 +302,12 @@
         .modal-card {
             background: #fff;
             width: 100%;
-            max-width: 450px;
+            max-width: 480px;
             padding: 26px;
             border-radius: 12px;
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            max-height: 90vh;
+            overflow-y: auto;
         }
 
         .modal-header {
@@ -334,7 +335,7 @@
 
 <?php if (empty($usuarioLogueado)): ?>
     <!-- ========================================== -->
-    <!-- PANTALLAS DE AUTENTICACIÓN: LOGIN / REGISTRO / RECUPERAR -->
+    <!-- PANTALLAS DE AUTENTICACIÓN (LOGIN, REGISTRO, RECUPERACIÓN) -->
     <!-- ========================================== -->
     <div class="auth-container">
         <div class="auth-card">
@@ -342,7 +343,7 @@
             <div class="auth-header">
                 <span class="logo-badge">Línea Occidente</span>
                 <h1 id="authTitle">Acceso al Sistema</h1>
-                <p id="authSubtitle">Sistema de Control de Rutas y Despacho</p>
+                <p id="authSubtitle">Conectado a Base de Datos MySQL (login.sql)</p>
             </div>
 
             <!-- Contenedor de Alertas AJAX -->
@@ -352,8 +353,8 @@
             <div id="sectionLogin" class="form-section active">
                 <form id="formLogin" onsubmit="ejecutarLogin(event)">
                     <div class="form-group">
-                        <label for="loginUser">Usuario</label>
-                        <input type="text" id="loginUser" class="form-control" placeholder="Ej: admin" autofocus>
+                        <label for="loginUser">Usuario o Correo Electrónico</label>
+                        <input type="text" id="loginUser" class="form-control" placeholder="Ej: admin o admin@ejemplo.com" autofocus>
                     </div>
 
                     <div class="form-group">
@@ -365,14 +366,14 @@
                 </form>
 
                 <div class="auth-links">
-                    <a onclick="cambiarSeccion('registro')">Crear nuevo usuario</a>
+                    <a onclick="cambiarSeccion('registro')">Crear nueva cuenta</a>
                     <a onclick="cambiarSeccion('recuperar')">¿Olvidó su contraseña?</a>
                 </div>
 
                 <div class="credential-tip">
-                    <strong>Usuarios de prueba preconfigurados:</strong><br>
-                    • <strong>admin</strong> / clave: <strong>admin123</strong> (Administrador)<br>
-                    • <strong>carlos</strong> / clave: <strong>carlos123</strong> (Despachador)
+                    <strong>Usuario inicial de la base de datos (login.sql):</strong><br>
+                    • <strong>Usuario:</strong> <code>admin</code> (o <code>admin@ejemplo.com</code>)<br>
+                    • <strong>Contraseña:</strong> <code>password</code> <em>(Rol: admin)</em>
                 </div>
             </div>
 
@@ -381,21 +382,17 @@
                 <form id="formRegistro" onsubmit="ejecutarRegistro(event)">
                     <div class="form-group">
                         <label for="regNombre">Nombre Completo</label>
-                        <input type="text" id="regNombre" class="form-control" placeholder="Ej: Juan Pérez">
+                        <input type="text" id="regNombre" class="form-control" placeholder="Ej: María Rodríguez">
                     </div>
 
                     <div class="form-group">
                         <label for="regUser">Nombre de Usuario</label>
-                        <input type="text" id="regUser" class="form-control" placeholder="Ej: juanperez">
+                        <input type="text" id="regUser" class="form-control" placeholder="Ej: mrodriguez">
                     </div>
 
                     <div class="form-group">
-                        <label for="regRol">Rol en el Sistema</label>
-                        <select id="regRol" class="form-control">
-                            <option value="Oficinista">Oficinista</option>
-                            <option value="Despachador">Despachador</option>
-                            <option value="Administrador">Administrador</option>
-                        </select>
+                        <label for="regCorreo">Correo Electrónico</label>
+                        <input type="email" id="regCorreo" class="form-control" placeholder="Ej: maria@ejemplo.com">
                     </div>
 
                     <div class="form-group">
@@ -408,7 +405,7 @@
                         <input type="password" id="regPassConfirm" class="form-control" placeholder="••••••••">
                     </div>
 
-                    <button type="submit" id="btnRegistro" class="btn btn-success">Registrar Usuario</button>
+                    <button type="submit" id="btnRegistro" class="btn btn-success">Registrarse</button>
                 </form>
 
                 <div class="auth-links" style="justify-content: center;">
@@ -420,8 +417,8 @@
             <div id="sectionRecuperar" class="form-section">
                 <form id="formRecuperar" onsubmit="ejecutarRecuperar(event)">
                     <div class="form-group">
-                        <label for="recUser">Nombre de Usuario a Recuperar</label>
-                        <input type="text" id="recUser" class="form-control" placeholder="Ej: admin o carlos">
+                        <label for="recIdentificador">Usuario o Correo Registrado</label>
+                        <input type="text" id="recIdentificador" class="form-control" placeholder="Ej: admin o admin@ejemplo.com">
                     </div>
 
                     <div class="form-group">
@@ -447,16 +444,16 @@
 
 <?php else: ?>
     <!-- ========================================== -->
-    <!-- PANTALLA DASHBOARD: CRUD DE USUARIOS (AUTENTICADO) -->
+    <!-- PANTALLA DASHBOARD: CRUD DE USUARIOS (MYSQL) -->
     <!-- ========================================== -->
     <nav class="navbar">
         <div class="navbar-brand">
-            🚌 Línea Occidente <span style="font-weight: 400; font-size: 0.85rem; color: var(--text-muted);">| Panel de Usuarios</span>
+            🚌 Línea Occidente <span style="font-weight: 400; font-size: 0.85rem; color: var(--text-muted);">| Base de Datos MySQL</span>
         </div>
         <div class="navbar-user">
             <div>
                 <strong><?= htmlspecialchars($usuarioLogueado['nombre_completo']) ?></strong>
-                <span class="badge badge-admin"><?= htmlspecialchars($usuarioLogueado['rol']) ?></span>
+                <span class="badge badge-admin"><?= htmlspecialchars($usuarioLogueado['nombre_rol'] ?? 'usuario') ?></span>
             </div>
             <a href="/logout" class="btn btn-danger btn-sm">Cerrar Sesión</a>
         </div>
@@ -467,7 +464,7 @@
         <div class="dashboard-header">
             <div>
                 <h2>CRUD de Usuarios</h2>
-                <p style="color: var(--text-muted); font-size: 0.88rem;">Gestión de usuarios registrados en el sistema</p>
+                <p style="color: var(--text-muted); font-size: 0.88rem;">Usuarios almacenados en la tabla <code>usuarios</code> de MySQL</p>
             </div>
             <button class="btn btn-sm btn-success" onclick="abrirModalCrear()">+ Nuevo Usuario</button>
         </div>
@@ -478,32 +475,42 @@
             <table>
                 <thead>
                     <tr>
+                        <th>ID</th>
                         <th>Nombre Completo</th>
                         <th>Usuario</th>
+                        <th>Correo</th>
                         <th>Rol</th>
                         <th>Estado</th>
+                        <th>Último Acceso</th>
                         <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody id="tablaUsuarios">
                     <?php foreach ($listaUsuarios as $user): ?>
-                        <tr id="row-<?= htmlspecialchars($user['username']) ?>">
+                        <tr id="row-<?= (int)$user['id_usuario'] ?>">
+                            <td>#<?= (int)$user['id_usuario'] ?></td>
                             <td><strong><?= htmlspecialchars($user['nombre_completo']) ?></strong></td>
-                            <td><?= htmlspecialchars($user['username']) ?></td>
+                            <td><?= htmlspecialchars($user['usuario']) ?></td>
+                            <td><?= htmlspecialchars($user['correo']) ?></td>
                             <td>
-                                <span class="badge <?= $user['rol'] === 'Administrador' ? 'badge-admin' : ($user['rol'] === 'Despachador' ? 'badge-desp' : 'badge-ofic') ?>">
-                                    <?= htmlspecialchars($user['rol']) ?>
+                                <span class="badge <?= $user['nombre_rol'] === 'admin' ? 'badge-admin' : 'badge-user' ?>">
+                                    <?= htmlspecialchars($user['nombre_rol']) ?>
                                 </span>
                             </td>
                             <td>
-                                <span class="badge <?= ($user['estado'] ?? 'Activo') === 'Activo' ? 'badge-activo' : 'badge-inactivo' ?>">
-                                    <?= htmlspecialchars($user['estado'] ?? 'Activo') ?>
+                                <span class="badge <?= (int)$user['estado'] === 1 ? 'badge-activo' : 'badge-inactivo' ?>">
+                                    <?= (int)$user['estado'] === 1 ? 'Activo' : 'Inactivo' ?>
                                 </span>
+                            </td>
+                            <td>
+                                <small style="color: var(--text-muted);">
+                                    <?= $user['ultimo_acceso'] ? htmlspecialchars($user['ultimo_acceso']) : 'Sin ingresos' ?>
+                                </small>
                             </td>
                             <td>
                                 <div class="table-actions">
                                     <button class="btn btn-sm" onclick='abrirModalEditar(<?= json_encode($user) ?>)'>Editar</button>
-                                    <button class="btn btn-sm btn-danger" onclick="eliminarUsuario('<?= htmlspecialchars($user['username']) ?>')">Eliminar</button>
+                                    <button class="btn btn-sm btn-danger" onclick="eliminarUsuario(<?= (int)$user['id_usuario'] ?>, '<?= htmlspecialchars($user['usuario']) ?>')">Eliminar</button>
                                 </div>
                             </td>
                         </tr>
@@ -517,39 +524,43 @@
     <div id="modalCrear" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-header">
-                <h3>Nuevo Usuario</h3>
+                <h3>Nuevo Usuario (MySQL)</h3>
                 <button class="modal-close" onclick="cerrarModal('modalCrear')">&times;</button>
             </div>
             <div id="alertModalCrear" class="alert"></div>
             <form onsubmit="ejecutarCrearCrud(event)">
                 <div class="form-group">
                     <label for="crudNombre">Nombre Completo</label>
-                    <input type="text" id="crudNombre" class="form-control" required placeholder="Ej: Ana Morales">
+                    <input type="text" id="crudNombre" class="form-control" required placeholder="Ej: Pedro Sánchez">
                 </div>
                 <div class="form-group">
                     <label for="crudUser">Usuario</label>
-                    <input type="text" id="crudUser" class="form-control" required placeholder="Ej: anamorales">
+                    <input type="text" id="crudUser" class="form-control" required placeholder="Ej: psanchez">
+                </div>
+                <div class="form-group">
+                    <label for="crudCorreo">Correo Electrónico</label>
+                    <input type="email" id="crudCorreo" class="form-control" required placeholder="Ej: pedro@ejemplo.com">
                 </div>
                 <div class="form-group">
                     <label for="crudRol">Rol</label>
                     <select id="crudRol" class="form-control">
-                        <option value="Oficinista">Oficinista</option>
-                        <option value="Despachador">Despachador</option>
-                        <option value="Administrador">Administrador</option>
+                        <?php foreach ($roles as $rol): ?>
+                            <option value="<?= (int)$rol['id_rol'] ?>"><?= htmlspecialchars($rol['nombre_rol']) ?> (<?= htmlspecialchars($rol['descripcion']) ?>)</option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
                 <div class="form-group">
                     <label for="crudEstado">Estado</label>
                     <select id="crudEstado" class="form-control">
-                        <option value="Activo">Activo</option>
-                        <option value="Inactivo">Inactivo</option>
+                        <option value="1">Activo</option>
+                        <option value="0">Inactivo</option>
                     </select>
                 </div>
                 <div class="form-group">
                     <label for="crudPass">Contraseña (Mín. 6 caracteres)</label>
                     <input type="password" id="crudPass" class="form-control" required placeholder="••••••••">
                 </div>
-                <button type="submit" class="btn btn-success">Guardar Usuario</button>
+                <button type="submit" class="btn btn-success">Guardar en Base de Datos</button>
             </form>
         </div>
     </div>
@@ -558,33 +569,37 @@
     <div id="modalEditar" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-header">
-                <h3>Editar Usuario</h3>
+                <h3>Editar Usuario #<span id="editIdSpan"></span></h3>
                 <button class="modal-close" onclick="cerrarModal('modalEditar')">&times;</button>
             </div>
             <div id="alertModalEditar" class="alert"></div>
             <form onsubmit="ejecutarEditarCrud(event)">
-                <input type="hidden" id="editOriginalUsername">
-                <div class="form-group">
-                    <label>Usuario</label>
-                    <input type="text" id="editUsernameDisplay" class="form-control" disabled style="background:#e2e8f0;">
-                </div>
+                <input type="hidden" id="editIdUsuario">
                 <div class="form-group">
                     <label for="editNombre">Nombre Completo</label>
                     <input type="text" id="editNombre" class="form-control" required>
                 </div>
                 <div class="form-group">
+                    <label for="editUser">Usuario</label>
+                    <input type="text" id="editUser" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="editCorreo">Correo Electrónico</label>
+                    <input type="email" id="editCorreo" class="form-control" required>
+                </div>
+                <div class="form-group">
                     <label for="editRol">Rol</label>
                     <select id="editRol" class="form-control">
-                        <option value="Oficinista">Oficinista</option>
-                        <option value="Despachador">Despachador</option>
-                        <option value="Administrador">Administrador</option>
+                        <?php foreach ($roles as $rol): ?>
+                            <option value="<?= (int)$rol['id_rol'] ?>"><?= htmlspecialchars($rol['nombre_rol']) ?></option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
                 <div class="form-group">
                     <label for="editEstado">Estado</label>
                     <select id="editEstado" class="form-control">
-                        <option value="Activo">Activo</option>
-                        <option value="Inactivo">Inactivo</option>
+                        <option value="1">Activo</option>
+                        <option value="0">Inactivo</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -627,15 +642,15 @@
         if (seccion === 'login') {
             document.getElementById('sectionLogin').classList.add('active');
             title.innerText = 'Acceso al Sistema';
-            subtitle.innerText = 'Sistema de Control de Rutas y Despacho';
+            subtitle.innerText = 'Conectado a Base de Datos MySQL (login.sql)';
         } else if (seccion === 'registro') {
             document.getElementById('sectionRegistro').classList.add('active');
-            title.innerText = 'Crear Usuario';
-            subtitle.innerText = 'Registra una nueva cuenta en el sistema';
+            title.innerText = 'Crear Cuenta';
+            subtitle.innerText = 'Registra un nuevo usuario en la base de datos';
         } else if (seccion === 'recuperar') {
             document.getElementById('sectionRecuperar').classList.add('active');
             title.innerText = 'Recuperar Contraseña';
-            subtitle.innerText = 'Restablece la clave de acceso de tu usuario';
+            subtitle.innerText = 'Restablece la clave de acceso de tu cuenta';
         }
     }
 
@@ -655,7 +670,7 @@
 
         const btn = document.getElementById('btnLogin');
         btn.disabled = true;
-        btn.innerText = 'Verificando...';
+        btn.innerText = 'Verificando en MySQL...';
 
         try {
             const formData = new FormData();
@@ -690,18 +705,23 @@
 
         const nombre = document.getElementById('regNombre').value.trim();
         const usuario = document.getElementById('regUser').value.trim();
-        const rol = document.getElementById('regRol').value;
+        const correo = document.getElementById('regCorreo').value.trim();
         const pass = document.getElementById('regPass').value;
         const passConfirm = document.getElementById('regPassConfirm').value;
 
         // Validación Frontend
-        if (!nombre || !usuario || !pass || !passConfirm) {
+        if (!nombre || !usuario || !correo || !pass || !passConfirm) {
             mostrarAlerta('authAlert', 'Todos los campos son obligatorios.');
             return;
         }
 
         if (usuario.length < 3) {
             mostrarAlerta('authAlert', 'El usuario debe tener al menos 3 caracteres.');
+            return;
+        }
+
+        if (!correo.includes('@') || !correo.includes('.')) {
+            mostrarAlerta('authAlert', 'Por favor ingrese un correo electrónico válido.');
             return;
         }
 
@@ -717,13 +737,14 @@
 
         const btn = document.getElementById('btnRegistro');
         btn.disabled = true;
-        btn.innerText = 'Registrando...';
+        btn.innerText = 'Guardando en MySQL...';
 
         try {
             const formData = new FormData();
             formData.append('nombre', nombre);
             formData.append('usuario', usuario);
-            formData.append('rol', rol);
+            formData.append('correo', correo);
+            formData.append('id_rol', '2'); // 2 = rol usuario por defecto
             formData.append('password', pass);
             formData.append('confirm_password', passConfirm);
 
@@ -737,7 +758,7 @@
             if (res.ok && data.status === 'success') {
                 mostrarAlerta('authAlert', data.message, 'success');
                 document.getElementById('formRegistro').reset();
-                setTimeout(() => cambiarSeccion('login'), 1800);
+                setTimeout(() => cambiarSeccion('login'), 2000);
             } else {
                 mostrarAlerta('authAlert', data.message || 'Error al registrar el usuario.');
             }
@@ -745,7 +766,7 @@
             mostrarAlerta('authAlert', 'Error de conexión con el servidor.');
         } finally {
             btn.disabled = false;
-            btn.innerText = 'Registrar Usuario';
+            btn.innerText = 'Registrarse';
         }
     }
 
@@ -754,12 +775,12 @@
         e.preventDefault();
         ocultarAlerta('authAlert');
 
-        const usuario = document.getElementById('recUser').value.trim();
+        const identificador = document.getElementById('recIdentificador').value.trim();
         const pass = document.getElementById('recNewPass').value;
         const passConfirm = document.getElementById('recNewPassConfirm').value;
 
         // Validación Frontend
-        if (!usuario || !pass || !passConfirm) {
+        if (!identificador || !pass || !passConfirm) {
             mostrarAlerta('authAlert', 'Complete todos los campos de recuperación.');
             return;
         }
@@ -776,11 +797,11 @@
 
         const btn = document.getElementById('btnRecuperar');
         btn.disabled = true;
-        btn.innerText = 'Actualizando...';
+        btn.innerText = 'Actualizando clave...';
 
         try {
             const formData = new FormData();
-            formData.append('usuario', usuario);
+            formData.append('identificador', identificador);
             formData.append('nueva_password', pass);
             formData.append('confirm_nueva_password', passConfirm);
 
@@ -794,7 +815,7 @@
             if (res.ok && data.status === 'success') {
                 mostrarAlerta('authAlert', data.message, 'success');
                 document.getElementById('formRecuperar').reset();
-                setTimeout(() => cambiarSeccion('login'), 1800);
+                setTimeout(() => cambiarSeccion('login'), 2000);
             } else {
                 mostrarAlerta('authAlert', data.message || 'Error al recuperar contraseña.');
             }
@@ -816,11 +837,13 @@
 
     function abrirModalEditar(user) {
         ocultarAlerta('alertModalEditar');
-        document.getElementById('editOriginalUsername').value = user.username;
-        document.getElementById('editUsernameDisplay').value = user.username;
+        document.getElementById('editIdSpan').innerText = user.id_usuario;
+        document.getElementById('editIdUsuario').value = user.id_usuario;
         document.getElementById('editNombre').value = user.nombre_completo;
-        document.getElementById('editRol').value = user.rol;
-        document.getElementById('editEstado').value = user.estado || 'Activo';
+        document.getElementById('editUser').value = user.usuario;
+        document.getElementById('editCorreo').value = user.correo;
+        document.getElementById('editRol').value = user.id_rol;
+        document.getElementById('editEstado').value = user.estado;
         document.getElementById('editPass').value = '';
         document.getElementById('modalEditar').style.display = 'flex';
     }
@@ -836,20 +859,25 @@
 
         tbody.innerHTML = '';
         usuarios.forEach(user => {
-            const rolBadge = user.rol === 'Administrador' ? 'badge-admin' : (user.rol === 'Despachador' ? 'badge-desp' : 'badge-ofic');
-            const estadoBadge = (user.estado || 'Activo') === 'Activo' ? 'badge-activo' : 'badge-inactivo';
+            const rolBadge = user.nombre_rol === 'admin' ? 'badge-admin' : 'badge-user';
+            const estadoBadge = parseInt(user.estado) === 1 ? 'badge-activo' : 'badge-inactivo';
+            const estadoTexto = parseInt(user.estado) === 1 ? 'Activo' : 'Inactivo';
+            const ultimoAcceso = user.ultimo_acceso ? user.ultimo_acceso : 'Sin ingresos';
 
             const tr = document.createElement('tr');
-            tr.id = `row-${user.username}`;
+            tr.id = `row-${user.id_usuario}`;
             tr.innerHTML = `
+                <td>#${user.id_usuario}</td>
                 <td><strong>${user.nombre_completo}</strong></td>
-                <td>${user.username}</td>
-                <td><span class="badge ${rolBadge}">${user.rol}</span></td>
-                <td><span class="badge ${estadoBadge}">${user.estado || 'Activo'}</span></td>
+                <td>${user.usuario}</td>
+                <td>${user.correo}</td>
+                <td><span class="badge ${rolBadge}">${user.nombre_rol}</span></td>
+                <td><span class="badge ${estadoBadge}">${estadoTexto}</span></td>
+                <td><small style="color: var(--text-muted);">${ultimoAcceso}</small></td>
                 <td>
                     <div class="table-actions">
                         <button class="btn btn-sm" onclick='abrirModalEditar(${JSON.stringify(user)})'>Editar</button>
-                        <button class="btn btn-sm btn-danger" onclick="eliminarUsuario('${user.username}')">Eliminar</button>
+                        <button class="btn btn-sm btn-danger" onclick="eliminarUsuario(${user.id_usuario}, '${user.usuario}')">Eliminar</button>
                     </div>
                 </td>
             `;
@@ -862,11 +890,12 @@
         e.preventDefault();
         const nombre = document.getElementById('crudNombre').value.trim();
         const user = document.getElementById('crudUser').value.trim();
+        const correo = document.getElementById('crudCorreo').value.trim();
         const rol = document.getElementById('crudRol').value;
         const estado = document.getElementById('crudEstado').value;
         const pass = document.getElementById('crudPass').value;
 
-        if (!nombre || !user || !pass) {
+        if (!nombre || !user || !correo || !pass) {
             mostrarAlerta('alertModalCrear', 'Complete todos los campos obligatorios.');
             return;
         }
@@ -880,7 +909,8 @@
             const formData = new FormData();
             formData.append('nombre', nombre);
             formData.append('usuario', user);
-            formData.append('rol', rol);
+            formData.append('correo', correo);
+            formData.append('id_rol', rol);
             formData.append('estado', estado);
             formData.append('password', pass);
 
@@ -902,14 +932,16 @@
     // AJAX: Editar Usuario desde el CRUD
     async function ejecutarEditarCrud(e) {
         e.preventDefault();
-        const origUser = document.getElementById('editOriginalUsername').value;
+        const idUsuario = document.getElementById('editIdUsuario').value;
         const nombre = document.getElementById('editNombre').value.trim();
+        const user = document.getElementById('editUser').value.trim();
+        const correo = document.getElementById('editCorreo').value.trim();
         const rol = document.getElementById('editRol').value;
         const estado = document.getElementById('editEstado').value;
         const pass = document.getElementById('editPass').value;
 
-        if (!nombre) {
-            mostrarAlerta('alertModalEditar', 'El nombre es obligatorio.');
+        if (!nombre || !user || !correo) {
+            mostrarAlerta('alertModalEditar', 'Nombre, usuario y correo son obligatorios.');
             return;
         }
 
@@ -920,9 +952,11 @@
 
         try {
             const formData = new FormData();
-            formData.append('original_username', origUser);
+            formData.append('id_usuario', idUsuario);
             formData.append('nombre', nombre);
-            formData.append('rol', rol);
+            formData.append('usuario', user);
+            formData.append('correo', correo);
+            formData.append('id_rol', rol);
             formData.append('estado', estado);
             if (pass) formData.append('nueva_password', pass);
 
@@ -942,12 +976,12 @@
     }
 
     // AJAX: Eliminar Usuario desde el CRUD
-    async function eliminarUsuario(username) {
-        if (!confirm(`¿Está seguro de eliminar al usuario '${username}'?`)) return;
+    async function eliminarUsuario(idUsuario, username) {
+        if (!confirm(`¿Está seguro de eliminar al usuario '${username}' (ID: ${idUsuario}) de la base de datos?`)) return;
 
         try {
             const formData = new FormData();
-            formData.append('username', username);
+            formData.append('id_usuario', idUsuario);
 
             const res = await fetch('/usuarios/eliminar', { method: 'POST', body: formData });
             const data = await res.json();

@@ -22,32 +22,39 @@ class HomeController extends Controller
     public function index(): void
     {
         $usuarioLogueado = $_SESSION['usuario'] ?? null;
-        $listaUsuarios = $this->modelo->obtenerUsuarios();
+        $listaUsuarios = [];
+        $roles = [];
+
+        if ($usuarioLogueado) {
+            $listaUsuarios = $this->modelo->obtenerUsuarios();
+            $roles = $this->modelo->obtenerRoles();
+        }
 
         $this->render('home/index', [
             'usuarioLogueado' => $usuarioLogueado,
-            'listaUsuarios' => $listaUsuarios
+            'listaUsuarios' => $listaUsuarios,
+            'roles' => $roles
         ]);
     }
 
     /**
-     * Proceso de Login por AJAX con validación Backend
+     * Proceso de Login por AJAX conectado a MySQL con validación Backend
      */
     public function login(): void
     {
-        $username = trim($_POST['username'] ?? '');
+        $identificador = trim($_POST['username'] ?? '');
         $password = trim($_POST['password'] ?? '');
 
         // Validación Backend: campos obligatorios
-        if (empty($username) || empty($password)) {
+        if (empty($identificador) || empty($password)) {
             $this->json([
                 'status' => 'error',
-                'message' => 'Por favor ingrese tanto el usuario como la contraseña.'
+                'message' => 'Por favor ingrese su usuario/correo y contraseña.'
             ], 400);
         }
 
-        // Validación con el Modelo
-        $resultado = $this->modelo->autenticar($username, $password);
+        // Validación con el Modelo en MySQL
+        $resultado = $this->modelo->autenticar($identificador, $password);
 
         if (!$resultado['success']) {
             $this->json([
@@ -56,9 +63,9 @@ class HomeController extends Controller
             ], 401);
         }
 
-        // Guardar usuario en sesión (sin el hash de la contraseña por seguridad)
+        // Guardar usuario en sesión (sin el hash de la clave por seguridad)
         $datosUsuario = $resultado['usuario'];
-        unset($datosUsuario['password']);
+        unset($datosUsuario['clave_hash']);
         $_SESSION['usuario'] = $datosUsuario;
 
         $this->json([
@@ -75,15 +82,23 @@ class HomeController extends Controller
     {
         $nombre = trim($_POST['nombre'] ?? '');
         $usuario = trim($_POST['usuario'] ?? '');
+        $correo = trim($_POST['correo'] ?? '');
         $password = trim($_POST['password'] ?? '');
         $confirmPassword = trim($_POST['confirm_password'] ?? '');
-        $rol = trim($_POST['rol'] ?? 'Oficinista');
+        $idRol = (int)($_POST['id_rol'] ?? 2); // 2 = usuario estándar por defecto
 
         // Validación Backend
-        if (empty($nombre) || empty($usuario) || empty($password)) {
+        if (empty($nombre) || empty($usuario) || empty($correo) || empty($password)) {
             $this->json([
                 'status' => 'error',
                 'message' => 'Todos los campos son obligatorios.'
+            ], 400);
+        }
+
+        if (!filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+            $this->json([
+                'status' => 'error',
+                'message' => 'El correo electrónico ingresado no tiene un formato válido.'
             ], 400);
         }
 
@@ -108,12 +123,7 @@ class HomeController extends Controller
             ], 400);
         }
 
-        $rolesPermitidos = ['Administrador', 'Despachador', 'Oficinista'];
-        if (!in_array($rol, $rolesPermitidos, true)) {
-            $rol = 'Oficinista';
-        }
-
-        $resultado = $this->modelo->registrarUsuario($nombre, $usuario, $password, $rol);
+        $resultado = $this->modelo->registrarUsuario($nombre, $usuario, $correo, $password, $idRol, 1);
 
         if (!$resultado['success']) {
             $this->json([
@@ -124,7 +134,7 @@ class HomeController extends Controller
 
         $this->json([
             'status' => 'success',
-            'message' => '¡Usuario creado correctamente! Ahora puedes iniciar sesión.'
+            'message' => '¡Cuenta registrada con éxito en la base de datos! Ya puedes iniciar sesión.'
         ]);
     }
 
@@ -133,12 +143,12 @@ class HomeController extends Controller
      */
     public function recuperarPassword(): void
     {
-        $usuario = trim($_POST['usuario'] ?? '');
+        $identificador = trim($_POST['identificador'] ?? '');
         $nuevaPassword = trim($_POST['nueva_password'] ?? '');
         $confirmPassword = trim($_POST['confirm_nueva_password'] ?? '');
 
         // Validación Backend
-        if (empty($usuario) || empty($nuevaPassword) || empty($confirmPassword)) {
+        if (empty($identificador) || empty($nuevaPassword) || empty($confirmPassword)) {
             $this->json([
                 'status' => 'error',
                 'message' => 'Debe completar todos los campos.'
@@ -159,7 +169,7 @@ class HomeController extends Controller
             ], 400);
         }
 
-        $resultado = $this->modelo->actualizarPassword($usuario, $nuevaPassword);
+        $resultado = $this->modelo->actualizarPassword($identificador, $nuevaPassword);
 
         if (!$resultado['success']) {
             $this->json([
@@ -183,14 +193,22 @@ class HomeController extends Controller
 
         $nombre = trim($_POST['nombre'] ?? '');
         $usuario = trim($_POST['usuario'] ?? '');
+        $correo = trim($_POST['correo'] ?? '');
         $password = trim($_POST['password'] ?? '');
-        $rol = trim($_POST['rol'] ?? 'Oficinista');
-        $estado = trim($_POST['estado'] ?? 'Activo');
+        $idRol = (int)($_POST['id_rol'] ?? 2);
+        $estado = (int)($_POST['estado'] ?? 1);
 
-        if (empty($nombre) || empty($usuario) || empty($password)) {
+        if (empty($nombre) || empty($usuario) || empty($correo) || empty($password)) {
             $this->json([
                 'status' => 'error',
-                'message' => 'Nombre, usuario y contraseña son obligatorios.'
+                'message' => 'Todos los campos son obligatorios.'
+            ], 400);
+        }
+
+        if (!filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+            $this->json([
+                'status' => 'error',
+                'message' => 'El correo electrónico no es válido.'
             ], 400);
         }
 
@@ -201,7 +219,7 @@ class HomeController extends Controller
             ], 400);
         }
 
-        $resultado = $this->modelo->registrarUsuario($nombre, $usuario, $password, $rol, $estado);
+        $resultado = $this->modelo->registrarUsuario($nombre, $usuario, $correo, $password, $idRol, $estado);
 
         if (!$resultado['success']) {
             $this->json(['status' => 'error', 'message' => $resultado['message']], 400);
@@ -209,7 +227,7 @@ class HomeController extends Controller
 
         $this->json([
             'status' => 'success',
-            'message' => 'Usuario registrado exitosamente en el CRUD.',
+            'message' => 'Usuario guardado exitosamente en la base de datos.',
             'usuarios' => $this->modelo->obtenerUsuarios()
         ]);
     }
@@ -221,16 +239,25 @@ class HomeController extends Controller
     {
         $this->verificarAutenticado();
 
-        $originalUsername = trim($_POST['original_username'] ?? '');
+        $idUsuario = (int)($_POST['id_usuario'] ?? 0);
         $nombre = trim($_POST['nombre'] ?? '');
-        $rol = trim($_POST['rol'] ?? 'Oficinista');
-        $estado = trim($_POST['estado'] ?? 'Activo');
+        $usuario = trim($_POST['usuario'] ?? '');
+        $correo = trim($_POST['correo'] ?? '');
+        $idRol = (int)($_POST['id_rol'] ?? 2);
+        $estado = (int)($_POST['estado'] ?? 1);
         $nuevaPassword = !empty($_POST['nueva_password']) ? trim($_POST['nueva_password']) : null;
 
-        if (empty($originalUsername) || empty($nombre)) {
+        if ($idUsuario <= 0 || empty($nombre) || empty($usuario) || empty($correo)) {
             $this->json([
                 'status' => 'error',
-                'message' => 'El nombre y el usuario son obligatorios.'
+                'message' => 'Nombre, usuario y correo son obligatorios.'
+            ], 400);
+        }
+
+        if (!filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+            $this->json([
+                'status' => 'error',
+                'message' => 'El correo electrónico no tiene un formato válido.'
             ], 400);
         }
 
@@ -241,7 +268,7 @@ class HomeController extends Controller
             ], 400);
         }
 
-        $resultado = $this->modelo->actualizarUsuario($originalUsername, $nombre, $rol, $estado, $nuevaPassword);
+        $resultado = $this->modelo->actualizarUsuario($idUsuario, $nombre, $usuario, $correo, $idRol, $estado, $nuevaPassword);
 
         if (!$resultado['success']) {
             $this->json(['status' => 'error', 'message' => $resultado['message']], 400);
@@ -249,7 +276,7 @@ class HomeController extends Controller
 
         $this->json([
             'status' => 'success',
-            'message' => 'Usuario actualizado correctamente.',
+            'message' => 'Usuario actualizado correctamente en la base de datos.',
             'usuarios' => $this->modelo->obtenerUsuarios()
         ]);
     }
@@ -261,21 +288,21 @@ class HomeController extends Controller
     {
         $this->verificarAutenticado();
 
-        $username = trim($_POST['username'] ?? '');
+        $idUsuario = (int)($_POST['id_usuario'] ?? 0);
 
-        if (empty($username)) {
-            $this->json(['status' => 'error', 'message' => 'Usuario no especificado.'], 400);
+        if ($idUsuario <= 0) {
+            $this->json(['status' => 'error', 'message' => 'ID de usuario inválido.'], 400);
         }
 
-        // Impedir que un usuario se elimine a sí mismo
-        if (strcasecmp($_SESSION['usuario']['username'] ?? '', $username) === 0) {
+        // Impedir que un usuario elimine su propia cuenta activa
+        if ((int)($_SESSION['usuario']['id_usuario'] ?? 0) === $idUsuario) {
             $this->json([
                 'status' => 'error',
                 'message' => 'No puedes eliminar tu propia cuenta en sesión.'
             ], 400);
         }
 
-        $resultado = $this->modelo->eliminarUsuario($username);
+        $resultado = $this->modelo->eliminarUsuario($idUsuario);
 
         if (!$resultado['success']) {
             $this->json(['status' => 'error', 'message' => $resultado['message']], 400);
@@ -283,7 +310,7 @@ class HomeController extends Controller
 
         $this->json([
             'status' => 'success',
-            'message' => $resultado['message'],
+            'message' => 'Usuario eliminado correctamente de la base de datos.',
             'usuarios' => $this->modelo->obtenerUsuarios()
         ]);
     }
@@ -296,6 +323,11 @@ class HomeController extends Controller
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
+
+        if (!empty($_SESSION['usuario']['id_usuario'])) {
+            $this->modelo->registrarLog((int)$_SESSION['usuario']['id_usuario'], $_SESSION['usuario']['usuario'], 'logout');
+        }
+
         unset($_SESSION['usuario']);
         session_destroy();
 
