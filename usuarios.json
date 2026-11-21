@@ -1,0 +1,16 @@
+[
+    {
+        "nombre_completo": "Administrador del Sistema",
+        "username": "admin",
+        "password": "$2y$10$EXvUah4\/pHuArFFoipdP3eJDwg\/.QMuLCnZrv0DhpUHau5uZRwWIi",
+        "rol": "Administrador",
+        "estado": "Activo"
+    },
+    {
+        "nombre_completo": "gustavo Guerrero",
+        "username": "Gustavo",
+        "password": "$2y$10$CLX8\/cuIFgEmdImLGZvWLOdO6.C15gyqKxRoopWKAxcxjW9hfegOW",
+        "rol": "Despachador",
+        "estado": "Activo"
+    }
+]
